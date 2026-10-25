@@ -1,5 +1,5 @@
 /*
-  PROGRAMME : Émetteur DATA-ACK Point à Point (Couche 2 - Capsule 2)
+ * PROGRAMME : Émetteur DATA-ACK Point à Point (Couche 2 - Capsule 2)
  * MODIFICATIONS APPORTÉES POUR M5STACK (cf. Diapo 5/7 SAE32) :
  * 1. #include <RH_RF95.h> : Remplacement de la librairie RH_RF22 (WiNo) par RH_RF95 (LoRa M5Stack).
  * 2. #include <M5Stack.h> : Remplacement de <LowPower_Teensy3.h> par la librairie M5Stack.
