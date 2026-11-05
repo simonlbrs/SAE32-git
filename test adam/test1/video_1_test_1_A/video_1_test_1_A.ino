@@ -23,8 +23,7 @@ void setup() {
   rf95.init();
   rf95.setTxPower(8);
   rf95.setModemConfig(RH_RF95::Bw125Cr45Sf128);
-  //Changement de frÃ©quence 
-  rf95.setFrequency(868.1);
+  rf95.setFrequency(867.7);
 
   state = EMISSION;
   delay(3000);
@@ -44,7 +43,7 @@ void loop() {
 
     case DELAI:
       M5.Lcd.println("DELAI");
-      delay(1000);
+      delay(0);
       state = EMISSION;
       break;
 
