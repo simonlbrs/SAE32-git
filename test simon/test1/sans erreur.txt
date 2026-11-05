@@ -1,0 +1,1 @@
+Vérifier que la transmission s'effectue normalement. Pour Reed-Solomon spécifiquement, vous devez démontrer que lorsque les 20 octets de données valent 255, la somme simple calculée est S = 5100 et la somme pondérée est SP = 53550.

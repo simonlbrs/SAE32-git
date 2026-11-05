@@ -1,0 +1,1 @@
+ Altérer la redondance sans toucher aux données utiles. Avec le Bouton B, vous pouvez injecter une erreur directement sur la somme $S$ pour Reed-Solomon (ou sur le XOR de l'ACK pour l'autre méthode) afin de vérifier le comportement du système face à une corruption des éléments de contrôle.

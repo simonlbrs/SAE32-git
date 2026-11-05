@@ -1,0 +1,1 @@
+Modifier la bibliothèque RadioHead pour désactiver le filtrage natif de la puce, ce qui permet de tester la robustesse de vos codes face à de véritables perturbations électromagnétiques ambiantes.

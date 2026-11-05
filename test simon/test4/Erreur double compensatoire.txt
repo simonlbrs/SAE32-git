@@ -1,0 +1,1 @@
+Démontrer les limites de fiabilité de la détection simple par XOR en inversant le même bit sur deux octets différents, ce qui annule l'erreur mathématiquement et fait accepter la trame à tort.
