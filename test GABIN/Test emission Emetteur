@@ -1,0 +1,131 @@
+// EMETTEUR - adapte M5Stack (ESP32). Carte : M5Stack-Core-ESP32 / librairie RadioHead
+// TESTS 1, 2, 3 : MyAdr = 1 (test 1), puis 1 et 2 (test 2), puis 1..9 (test 3) - un M5Stack par adresse
+#include <SPI.h>
+#include <RH_RF22.h>                // nouvelle librairie RadioHead
+
+// Brochage module RF22 sur le M5Stack (a adapter a ton cablage)
+#define PIN_SCK  18
+#define PIN_MISO 19
+#define PIN_MOSI 23
+#define PIN_CS    5
+#define PIN_IRQ  35                 // sortie nIRQ du module
+
+RH_RF22 rf22(PIN_CS, PIN_IRQ);
+
+uint8_t rxbuf[RH_RF22_MAX_MESSAGE_LEN], rxbuflen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t txbuf[RH_RF22_MAX_MESSAGE_LEN], txbuflen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t rxlen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t state,RxSeq,TxSeq,credit,backoff,NewFrame,EIT;
+uint32_t attente;
+#define E0 0
+#define E1 1
+#define E2 2
+#define E3 3
+#define E4 4
+#define E5 5
+#define canal 1
+#define TYPE_DATA 1
+#define TYPE_ACK 2
+#define TIMEOUT_ACK 40
+
+#define MyAdr 1 // adresse locale du noeud Tx1 ou Tx2 ou … Tx9
+
+void setup()
+{
+  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);   // remplace SPI.setSCK(14) du Teensy
+  Serial.begin(9600);
+  if (!rf22.init()) Serial.println("RF22 init failed");
+  else              Serial.println("RF22 init OK");
+  rf22.setTxPower(RH_RF22_TXPOW_8DBM);
+  rf22.setModemConfig(RH_RF22::GFSK_Rb125Fd125);
+  rf22.setFrequency(433.1+canal*0.1, 0.05);
+
+  state = E0;
+  delay(3000);
+  TxSeq = 0; credit = 5;
+  Serial.println("Boucle principale");
+
+  NewFrame = 1;
+  randomSeed(esp_random()); // remplace analogRead(A3) (pas d'entree A3 sur ESP32)
+}
+void loop() {
+switch (state)
+{
+  case E0:
+    if (NewFrame == 1)      // loi d'arrivée aléatoire du flux de trames à envoyer
+    {
+      EIT = random(5,100);
+      delay(EIT); // la nouvelle trame à envoyer arrive entre 5 et 99 ms plus tard
+      Serial.printf(" EIT : %d ",EIT); Serial.println();
+    }
+    Serial.printf("EMISSION %d : ",TxSeq);
+    txbuf[0] = MyAdr; // @S : moi
+    txbuf[1] = 0; // @D : le puits
+    txbuf[2] = TYPE_DATA; // type de message
+    txbuf[3] = TxSeq;
+    txbuf[4] = 0x0AA;
+    txbuf[5] = 0x55;
+    rf22.send(txbuf, 6); // envoie de données (une trame de 6 octets)
+    rf22.waitPacketSent();
+    credit--;               // on vient d'émettre une fois de + la trame
+    state = E1;
+    break;
+
+  case E1: // CORRECTION : etat manquant -> armer le watchdog et passer en reception
+    attente = millis() + TIMEOUT_ACK;
+    rf22.setModeRx();
+    state = E3;
+    break;
+
+  case E2: // CORRECTION : etat manquant -> trame recue mais pas mon ACK, on continue d'attendre
+    rf22.setModeRx();
+    state = E3;
+    break;
+
+  case E3: // attente d'ACK non bloquante (car test trame reçue durant le CdG)
+    if (millis() > attente)           // vérification si le watchdog est expiré
+    { state = E5; }                 // si attente expirée : pb !
+    else                              // si attente en cours (CdG non expiré)
+    {
+      rxlen = RH_RF22_MAX_MESSAGE_LEN; // CORRECTION : retablir la taille max avant recv
+      if (rf22.recv(rxbuf, &rxlen)) // vérifier si une trame est disponible
+      {
+        if ((rxbuf[2] == TYPE_ACK) && (rxbuf[3] == TxSeq) && (rxbuf[1] == MyAdr))
+        { // si la trame reçue est de type ACK et même numéro et pour moi
+          state = E4;             //si oui on affiche la trame reçue
+        }
+        else state = E2;            // sinon on retourne à l'état E2
+      }
+    }
+    break;
+
+  case E4:
+    Serial.println("ACK_RECU");
+    state = E0; TxSeq++; credit = 5; // trame suivante
+    NewFrame = 1;                    // CORRECTION : sinon plus de EIT apres le 1er ACK
+    break;
+
+  case E5:      // si le watchdog expire sans réception d'ACK, ECHEC si crédit épuisé
+    Serial.println("E5");
+    if (credit == 0)
+    {
+      Serial.println("ECHEC");
+      state = E0; NewFrame = 1;     // nouvelle trame (prévoir EIT : flux d'arrivée)
+      credit = 5; TxSeq++;
+      break;
+    }
+    else
+    {
+      Serial.printf("Collision ? Nouvelle tentative n° %d",5-credit);
+      state = E0; NewFrame = 0;     // toujours même trame : pas de EIT de flux
+      backoff = random(0,100);
+      delay(backoff);               // attente aléatoire ALOHA
+      Serial.printf(" Backoff : %d",backoff);
+      Serial.println();
+      break;
+    }
+  default:
+    state = E0;
+    break;
+}
+}

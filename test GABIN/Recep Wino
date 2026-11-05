@@ -1,0 +1,127 @@
+// RECEPTEUR - adapte M5Stack (ESP32). Carte : M5Stack-Core-ESP32 / librairie RadioHead
+// Pour les tests 1 a 7. MyAdr = 0 (R0) ; 10 ou 11 pour le test 7.
+#include <SPI.h>
+#include <RH_RF22.h>
+
+// Brochage module RF22 sur le M5Stack (a adapter a ton cablage)
+#define PIN_SCK  18
+#define PIN_MISO 19
+#define PIN_MOSI 23
+#define PIN_CS    5
+#define PIN_IRQ  35                 // sortie nIRQ du module
+
+RH_RF22 rf22(PIN_CS, PIN_IRQ);
+
+uint8_t state,i;
+uint8_t rxbuf[RH_RF22_MAX_MESSAGE_LEN], rxbuflen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t txbuf[RH_RF22_MAX_MESSAGE_LEN], txbuflen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t rxlen = RH_RF22_MAX_MESSAGE_LEN;
+uint8_t RxSeq[16];   // CORRECTION : "Uint8_t" -> "uint8_t" ; un numero par emetteur (sinon faux "Duplication" avec 2 emetteurs)
+uint32_t attente; // pour plus tard si full-duplex
+
+#define E0 0
+#define E1 1
+#define E2 2
+#define E3 3
+
+#define canal 1
+
+#define TYPE_DATA 1
+#define TYPE_ACK 2
+
+#define MyAdr 0 // adresse locale du noeud Rx0
+
+void setup() {
+
+  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);   // remplace SPI.setSCK(14) du Teensy
+
+  // Initializes console port
+  Serial.begin(9600);
+
+  if (!rf22.init())
+    Serial.println("RF22 init failed");
+  else
+    Serial.println("RF22 init OK");
+
+  rf22.setTxPower(RH_RF22_TXPOW_8DBM);
+  rf22.setModemConfig(RH_RF22::GFSK_Rb125Fd125);
+  rf22.setFrequency(433.1+canal*0.1, 0.05);
+
+  state = E0;
+  delay(3000);
+  Serial.println("Boucle principale");
+  for (i = 0; i < 16; i++) 
+    RxSeq[i] = 255; // pas encore reçu la trame n°0. 0-1 = 255 sur 8 bits non signés
+}
+
+void loop()
+{
+  int j; // index pour parcourir les octets de la trame reçue à afficher
+  switch (state)
+  {
+    case E0: // se mettre en réception des données
+      Serial.println("E0");
+      rf22.setModeRx();
+      state = E1;
+      break;
+
+    case E1: // vérifier si un message reçu est disponible
+      rxlen = RH_RF22_MAX_MESSAGE_LEN; // taille max en réception
+      if (rf22.recv(rxbuf, &rxlen))
+      {
+        if ((rxbuf[2] == TYPE_DATA) && (rxbuf[1] == MyAdr) && (rxbuf[0] < 16))
+        { // si message est de type DATA et pour moi
+          state = E2;
+        }
+        else
+        {
+          state = E0;
+        }
+      }
+      break;
+
+    case E2: // afficher la trame
+      if (RxSeq[rxbuf[0]] != rxbuf[3]) // si 1ere fois que l'on reçoit cette trame
+      {
+        RxSeq[rxbuf[0]] = rxbuf[3];
+        Serial.print(" [");
+        Serial.print(rxbuf[3]);
+        Serial.print("] DATA de ");
+        Serial.print(rxlen);
+        Serial.println(" octets :");
+
+        for (j = 0; j < rxlen; j++)
+        {
+          if (rxbuf[j] < 0x10)
+          {
+            Serial.print("0"); // garde l'affichage sur 2 chiffres comme %02x
+          }
+          Serial.print(rxbuf[j], HEX);
+          Serial.print("|");
+        }
+        Serial.println();
+      }
+      else // si on a déjà reçu cette même trame
+      {
+        Serial.println("Duplication");
+      }
+      state = E3;
+      break;
+
+    case E3: // envoyer ACK
+      Serial.println("E3");
+      txbuf[0] = MyAdr;    // je suis la source de l'ACK
+      txbuf[1] = rxbuf[0]; // j'émets l'ACK vers la source de la DATA
+      txbuf[2] = TYPE_ACK; // octet indiquant le type_message ACK
+      txbuf[3] = rxbuf[3]; // ACK de même numéro que DATA
+      rf22.send(txbuf, 4);
+      rf22.waitPacketSent();
+
+      state = E0;
+      break;
+
+    default:
+      state = E0;
+      break;
+  }
+}
