@@ -22,16 +22,13 @@ uint32_t attente;
 
 #define TYPE_DATA 1
 #define TYPE_ACK 2
-
-//  MODIFICATION POUR LE TEST 10 
-// Un délai de 100 ms est beaucoup trop court pour un aller-retour (DATA + ACK) en LoRa
-#define TIMEOUT_ACK 100 
+#define TIMEOUT_ACK 1500
 
 void setup() {
   M5.begin();
   M5.Power.begin();
   M5.Lcd.setTextSize(2);
-  M5.Lcd.println("Emetteur - Test 10");
+  M5.Lcd.println("Emetteur - Test 9");
 
   if (!rf95.init()) {
     M5.Lcd.println("RF95 init failed");
@@ -50,7 +47,7 @@ void setup() {
 
   M5.Lcd.clear();
   M5.Lcd.setCursor(0, 0);
-  M5.Lcd.println(" TEST 10: CDG COURT ");
+  M5.Lcd.println("--- TEST 9: TRAMES LONGUES ---");
 }
 
 void loop() {
@@ -60,12 +57,19 @@ void loop() {
     case E0:
       M5.Lcd.printf("\nEMISSION [%d] (Cred:%d): ", TxSeq, credit);
 
-      txbuf[0] = TYPE_DATA;
-      txbuf[1] = TxSeq;
+      // --- MODIFICATION POUR LE TEST 9 ---
+      txbuf[0] = TYPE_DATA; // 1 octet de Type
+      txbuf[1] = TxSeq;     // 1 octet de N° Séquence
+      
+      // 5 octets de charge utile (PLOAD) au lieu de 2
       txbuf[2] = 0xAA;
       txbuf[3] = 0x55;
+      txbuf[4] = 0x11;
+      txbuf[5] = 0x22;
+      txbuf[6] = 0x33;
 
-      rf95.send(txbuf, 4);
+      // On indique qu'on envoie 7 octets au total
+      rf95.send(txbuf, 7);
       rf95.waitPacketSent();
 
       credit--;
@@ -73,7 +77,7 @@ void loop() {
       break;
 
     case E1:
-      attente = millis() + TIMEOUT_ACK; // Armement avec le CdG de 100 ms
+      attente = millis() + TIMEOUT_ACK;
       state = E2;
       break;
 
@@ -84,7 +88,7 @@ void loop() {
 
     case E3:
       if (millis() > attente) {
-        state = E5; // Expirera presque systématiquement à cause de la lenteur LoRa
+        state = E5; 
       } else {
         rxlen = RH_RF95_MAX_MESSAGE_LEN;
         if (rf95.recv(rxbuf, &rxlen)) {
@@ -106,7 +110,7 @@ void loop() {
       break;
 
     case E5:
-      M5.Lcd.println("TIMEOUT (CdG trop court) !");
+      M5.Lcd.println("TIMEOUT !");
       if (credit == 0) {
         M5.Lcd.println("ECHEC : Credit epuise !");
         TxSeq++;
